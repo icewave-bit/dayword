@@ -9,6 +9,7 @@ import {
   gameModeAtom,
   keyboardRowsAtom,
   keyboardStateAtom,
+  liveRoundIdAtom,
   loadDailyAndHydrateAtom,
   localeAtom,
   MAX_ATTEMPTS,
@@ -28,6 +29,7 @@ import { t } from '../lib/i18n'
 import { SuggestWordAction } from './SuggestWordAction'
 import { UserAuthBar } from './UserAuthBar'
 import { HelpDisclosure } from './HelpDisclosure'
+import { LiveRoundCountdown } from './LiveRoundCountdown'
 
 type CellState = 'correct' | 'present' | 'absent'
 
@@ -61,6 +63,7 @@ export function GameScreen() {
   const userAuth = useAtomValue(userAuthAtom)
   const locale = useAtomValue(localeAtom)
   const wordLength = useAtomValue(wordLengthAtom)
+  const liveRoundId = useAtomValue(liveRoundIdAtom)
   const currentGuess = useAtomValue(currentGuessAtom)
   const message = useAtomValue(messageAtom)
   const status = useAtomValue(statusAtom)
@@ -181,6 +184,9 @@ export function GameScreen() {
         <p className="mode-badge" data-mode={gameMode}>
           {gameMode === 'live' ? c.modeLiveBadge : c.modePracticeBadge}
         </p>
+        {gameMode === 'live' ? (
+          <LiveRoundCountdown liveRoundId={liveRoundId} label={c.liveRoundCountdownLabel} />
+        ) : null}
       </header>
 
       <section

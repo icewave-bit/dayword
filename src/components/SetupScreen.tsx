@@ -17,6 +17,7 @@ import { t } from '../lib/i18n'
 import { UserAuthBar } from './UserAuthBar'
 import { MonthlyLeaderboardTop3 } from './MonthlyLeaderboardTop3'
 import { HelpDisclosure } from './HelpDisclosure'
+import { LiveRoundCountdown } from './LiveRoundCountdown'
 import { SettingsDisclosure } from './SettingsDisclosure'
 
 export function SetupScreen() {
@@ -53,6 +54,8 @@ export function SetupScreen() {
         </div>
         <h1 className="game-title">{c.title}</h1>
       </header>
+
+      <LiveRoundCountdown liveRoundId={null} label={c.liveRoundCountdownLabel} />
 
       <div className="setup-actions">
         <button type="button" className="primary-action" onClick={() => startLive()}>

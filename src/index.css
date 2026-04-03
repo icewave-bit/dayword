@@ -278,6 +278,22 @@ header p {
   color: var(--chip-active-bg);
 }
 
+.live-round-countdown {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--header-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-round-countdown-label {
+  font-weight: 600;
+}
+
+.live-round-countdown-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.06em;
+}
+
 .footer-actions {
   display: flex;
   flex-wrap: wrap;

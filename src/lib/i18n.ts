@@ -10,6 +10,8 @@ export type Copy = {
   subtitlePractice: (n: number) => string
   modeLiveBadge: string
   modePracticeBadge: string
+  /** До смены общего слова (live) */
+  liveRoundCountdownLabel: string
   newGameLive: string
   newGamePractice: string
   languageLabel: string
@@ -107,6 +109,7 @@ const copy: Record<Locale, Copy> = {
     subtitlePractice: (n) => `Случайное слово только для вас. ${n} букв, 6 попыток.`,
     modeLiveBadge: 'Общий раунд · 3 ч',
     modePracticeBadge: 'Тренировка',
+    liveRoundCountdownLabel: 'Новое слово через',
     newGameLive: 'Сбросить попытки',
     newGamePractice: 'Новое слово',
     languageLabel: 'Язык',
@@ -203,6 +206,7 @@ const copy: Record<Locale, Copy> = {
     subtitlePractice: (n) => `Random word just for you. ${n} letters, 6 tries.`,
     modeLiveBadge: 'Live round · 3h',
     modePracticeBadge: 'Practice',
+    liveRoundCountdownLabel: 'Next word in',
     newGameLive: 'Clear attempts',
     newGamePractice: 'New word',
     languageLabel: 'Language',
