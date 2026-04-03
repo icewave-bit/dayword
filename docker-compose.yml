@@ -1,0 +1,45 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    env_file:
+      - ./.env
+    expose:
+      - "${API_PORT:-3001}"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.dayword-api.rule=Host(`${APP_HOST}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.dayword-api.entrypoints=web-secure"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL}
+      VITE_DEBUG_CHECK: ${VITE_DEBUG_CHECK:-}
+      SERVER_FALLBACK_PAGE: /public/index.html
+      SERVER_ERROR_PAGE_404: /public/index.html
+    depends_on:
+      - api
+    expose:
+      - 80
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.dayword-web.rule=Host(`${APP_HOST}`)"
+      - "traefik.http.routers.dayword-web.entrypoints=web-secure"
+    restart: unless-stopped
+
+networks:
+  proxy:
+    external:
+      name: ${TRAEFIK_DOCKER_NETWORK:-proxy}
+

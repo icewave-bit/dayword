@@ -1,0 +1,19 @@
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Для better-sqlite3 (native) — если для вашей платформы нет prebuilt.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY server ./server
+
+EXPOSE 3001
+
+CMD ["node", "server/index.mjs"]
+

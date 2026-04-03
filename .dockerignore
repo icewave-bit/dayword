@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.cursor
+.vscode
+
+# Не тащим секреты в билд
+.env
+.env.*
+
+# Данные словаря подхватываются docker-compose volume mount'ом
+data
+
