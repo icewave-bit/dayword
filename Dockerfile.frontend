@@ -1,7 +1,6 @@
 FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
-ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -12,6 +11,7 @@ COPY tsconfig*.json ./
 COPY public ./public
 COPY src ./src
 
+ENV NODE_ENV=production
 RUN npm run build
 
 
