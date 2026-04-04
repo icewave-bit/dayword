@@ -239,6 +239,45 @@ export async function adminLogout(signal?: AbortSignal): Promise<void> {
   if (!res.ok) throw new Error('logout_failed')
 }
 
+export async function adminChangePassword(
+  params: { currentPassword: string; newPassword: string; newPasswordConfirm: string },
+  signal?: AbortSignal,
+): Promise<void> {
+  const base = apiBase()
+  const res = await fetch(`${base}/api/admin/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+    ...credFetch,
+    signal,
+  })
+  if (res.status === 401) {
+    const err = await res.json().catch(() => ({}))
+    const code =
+      typeof err === 'object' && err && 'error' in err
+        ? String((err as { error?: string }).error)
+        : 'wrong_current_password'
+    throw new Error(code)
+  }
+  if (res.status === 400) {
+    const err = await res.json().catch(() => ({}))
+    const code =
+      typeof err === 'object' && err && 'error' in err
+        ? String((err as { error?: string }).error)
+        : 'bad_request'
+    throw new Error(code)
+  }
+  if (res.status === 503) {
+    const err = await res.json().catch(() => ({}))
+    const code =
+      typeof err === 'object' && err && 'error' in err
+        ? String((err as { error?: string }).error)
+        : 'encryption_not_configured'
+    throw new Error(code)
+  }
+  if (!res.ok) throw new Error('change_password_failed')
+}
+
 export type AdminSuggestion = { lang: 'ru' | 'en'; word: string; suggestedAt: number | null }
 
 export async function adminListSuggestions(signal?: AbortSignal): Promise<AdminSuggestion[]> {

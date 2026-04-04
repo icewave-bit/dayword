@@ -14,7 +14,7 @@ import {
   localeAtom,
   MAX_ATTEMPTS,
   messageAtom,
-  openSetupAtom,
+  exitGameConfirmOpenAtom,
   removeLetterAtom,
   resetGameAtom,
   resultsAtom,
@@ -27,8 +27,7 @@ import {
 } from '../atoms'
 import { t } from '../lib/i18n'
 import { SuggestWordAction } from './SuggestWordAction'
-import { UserAuthBar } from './UserAuthBar'
-import { HelpDisclosure } from './HelpDisclosure'
+import { ExitGameConfirmDialog } from './ExitGameConfirmDialog'
 import { LiveRoundCountdown } from './LiveRoundCountdown'
 
 type CellState = 'correct' | 'present' | 'absent'
@@ -77,13 +76,15 @@ export function GameScreen() {
   const removeLetter = useSetAtom(removeLetterAtom)
   const submitGuess = useSetAtom(submitGuessAtom)
   const resetGame = useSetAtom(resetGameAtom)
-  const openSetup = useSetAtom(openSetupAtom)
+  const setExitConfirmOpen = useSetAtom(exitGameConfirmOpenAtom)
+  const exitConfirmOpen = useAtomValue(exitGameConfirmOpenAtom)
   const reloadGame = useSetAtom(loadDailyAndHydrateAtom)
   const syncLiveScore = useSetAtom(syncLiveRoundScoreAtom)
   const setHelpOpen = useSetAtom(helpOpenAtom)
   const c = t(locale)
 
   const inputLocked = loading || loadError !== null || !answer
+  const gameInputBlocked = inputLocked || exitConfirmOpen
 
   useEffect(() => {
     if (gameMode !== 'live') return
@@ -93,6 +94,7 @@ export function GameScreen() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (exitConfirmOpen) return
       if (inputLocked) return
       if (event.key === 'Enter') {
         event.preventDefault()
@@ -125,7 +127,7 @@ export function GameScreen() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [addLetter, removeLetter, submitGuess, locale, inputLocked])
+  }, [addLetter, removeLetter, submitGuess, locale, inputLocked, exitConfirmOpen])
 
   useEffect(() => {
     setHelpOpen(false)
@@ -157,7 +159,11 @@ export function GameScreen() {
         ? c.notInDictionary
         : message === 'alreadyUsed'
           ? c.alreadyUsed
-          : ''
+          : message === 'suggestSent'
+            ? c.suggestSent
+            : message === 'suggestDup'
+              ? c.suggestDuplicate
+              : ''
 
   const hintMessage =
     loading || !answer
@@ -176,14 +182,13 @@ export function GameScreen() {
 
   return (
     <main className="app">
-      <header className="app-header">
-        <div className="app-header-corner">
-          <UserAuthBar />
+      <header className="app-header app-header-game">
+        <div className="game-header-top-row">
+          <h1 className="game-title">{c.title}</h1>
+          <p className="mode-badge" data-mode={gameMode}>
+            {gameMode === 'live' ? c.modeLiveBadge : c.modePracticeBadge}
+          </p>
         </div>
-        <h1 className="game-title">{c.title}</h1>
-        <p className="mode-badge" data-mode={gameMode}>
-          {gameMode === 'live' ? c.modeLiveBadge : c.modePracticeBadge}
-        </p>
         {gameMode === 'live' ? (
           <LiveRoundCountdown liveRoundId={liveRoundId} label={c.liveRoundCountdownLabel} />
         ) : null}
@@ -217,7 +222,7 @@ export function GameScreen() {
         locale={locale}
         candidate={currentGuess}
         visible={
-          !inputLocked &&
+          !gameInputBlocked &&
           message === 'notInDictionary' &&
           currentGuess.length === wordLength
         }
@@ -234,12 +239,12 @@ export function GameScreen() {
           'keyboard',
           locale === 'ru' && 'keyboard-ru',
           locale === 'en' && 'keyboard-en',
-          inputLocked && 'keyboard-locked',
+          gameInputBlocked && 'keyboard-locked',
         ]
           .filter(Boolean)
           .join(' ')}
         aria-label={c.keyboardAria}
-        aria-disabled={inputLocked}
+        aria-disabled={gameInputBlocked}
       >
         {keyboardRows.map((row) => (
           <div className="keyboard-row" key={row}>
@@ -248,7 +253,7 @@ export function GameScreen() {
                 key={letter}
                 type="button"
                 className={`key ${keyboardState[letter] ?? ''}`.trim()}
-                disabled={inputLocked}
+                disabled={gameInputBlocked}
                 onClick={() => addLetter(letter)}
               >
                 {letter}
@@ -260,18 +265,18 @@ export function GameScreen() {
           <button
             type="button"
             className="key action"
-            disabled={inputLocked}
-            onClick={() => void submitGuess()}
+            disabled={gameInputBlocked}
+            onClick={() => removeLetter()}
           >
-            {c.enterKey}
+            {c.backspaceKey}
           </button>
           <button
             type="button"
             className="key action"
-            disabled={inputLocked}
-            onClick={() => removeLetter()}
+            disabled={gameInputBlocked}
+            onClick={() => void submitGuess()}
           >
-            {c.backspaceKey}
+            {c.enterKey}
           </button>
         </div>
       </section>
@@ -283,18 +288,16 @@ export function GameScreen() {
           onClick={() => {
             void resetGame()
           }}
-          disabled={loading}
+          disabled={loading || exitConfirmOpen}
         >
           {gameMode === 'live' ? c.newGameLive : c.newGamePractice}
         </button>
-        <button type="button" className="secondary" onClick={() => openSetup()}>
-          {c.changeSettings}
+        <button type="button" className="secondary" onClick={() => setExitConfirmOpen(true)}>
+          {c.exitGameScreen}
         </button>
       </div>
 
-      <HelpDisclosure
-        content={gameMode === 'live' ? c.subtitleLive(wordLength) : c.subtitlePractice(wordLength)}
-      />
+      <ExitGameConfirmDialog />
     </main>
   )
 }

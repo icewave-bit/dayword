@@ -23,6 +23,14 @@ export const themeAtom = atom<ThemeMode>('dark')
 export const sessionAtom = atom<GameSession>('setup')
 export const helpOpenAtom = atom(false)
 export const settingsOpenAtom = atom(false)
+/** Подтверждение выхода из экрана игры в меню */
+export const exitGameConfirmOpenAtom = atom(false)
+
+/** Вкладка языка в админке: список предложенных слов. */
+export const adminSuggestionsLangTabAtom = atom<'ru' | 'en'>('ru')
+
+/** Панель настроек админки (смена пароля и т.п.). */
+export const adminSettingsOpenAtom = atom(false)
 
 export const gameLoadingAtom = atom(false)
 export const gameLoadErrorAtom = atom<string | null>(null)
@@ -388,6 +396,15 @@ export const submitGuessAtom = atom(null, async (get, set) => {
   set(persistGameAtom)
 })
 
+/** После успешного предложения слова: очистить ввод и показать ответ в строке сообщений. */
+export const afterWordSuggestedAtom = atom(
+  null,
+  (_get, set, kind: 'sent' | 'dup') => {
+    set(currentGuessAtom, '')
+    set(messageAtom, kind === 'dup' ? 'suggestDup' : 'suggestSent')
+  },
+)
+
 export const addLetterAtom = atom(null, (get, set, letter: string) => {
   if (get(statusAtom) !== 'playing' || get(gameLoadingAtom)) return
   if (!get(answerAtom)) return
@@ -401,6 +418,11 @@ export const addLetterAtom = atom(null, (get, set, letter: string) => {
 export const removeLetterAtom = atom(null, (get, set) => {
   if (get(statusAtom) !== 'playing' || get(gameLoadingAtom)) return
   const current = get(currentGuessAtom)
+  if (current.length === 0) {
+    const msg = get(messageAtom)
+    if (msg === 'suggestSent' || msg === 'suggestDup') set(messageAtom, '')
+    return
+  }
   set(currentGuessAtom, current.slice(0, -1))
 })
 
@@ -474,6 +496,7 @@ export const startPracticeGameAtom = atom(null, (_get, set) => {
 })
 
 export const openSetupAtom = atom(null, (_get, set) => {
+  set(exitGameConfirmOpenAtom, false)
   set(sessionAtom, 'setup')
   set(persistSettingsAtom)
 })

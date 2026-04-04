@@ -842,6 +842,53 @@ app.post('/api/admin/logout', (req, res) => {
   res.json({ ok: true })
 })
 
+app.post('/api/admin/change-password', requireAdmin, (req, res) => {
+  const key = getEncryptionKey()
+  if (!key) {
+    res.status(503).json({ error: 'encryption_not_configured' })
+    return
+  }
+  const cred = loadAdminUserPass()
+  if (!cred) {
+    res.status(503).json({ error: 'admin_not_configured' })
+    return
+  }
+  const currentPassword = req.body?.currentPassword
+  const newPassword = req.body?.newPassword
+  const newPasswordConfirm = req.body?.newPasswordConfirm
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+    res.status(400).json({ error: 'bad_request' })
+    return
+  }
+  if (!safeEqualUtf8(currentPassword, cred.password)) {
+    res.status(401).json({ error: 'wrong_current_password' })
+    return
+  }
+  if (newPassword.length < 1 || newPassword.length > 256) {
+    res.status(400).json({ error: 'bad_password' })
+    return
+  }
+  if (typeof newPasswordConfirm !== 'string' || newPasswordConfirm !== newPassword) {
+    res.status(400).json({ error: 'password_mismatch' })
+    return
+  }
+  const passwordEnc = encryptField(newPassword, key)
+  try {
+    const info = db
+      .prepare('UPDATE admin_credentials SET password_enc = ? WHERE id = 1')
+      .run(passwordEnc)
+    if (info.changes === 0) {
+      res.status(503).json({ error: 'admin_not_configured' })
+      return
+    }
+  } catch (e) {
+    console.error('[admin/change-password]', e)
+    res.status(500).json({ error: 'internal' })
+    return
+  }
+  res.json({ ok: true })
+})
+
 app.get('/api/user/me', (req, res) => {
   const s = readUserSessionData(req)
   if (!s) {

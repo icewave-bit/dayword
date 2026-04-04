@@ -81,6 +81,11 @@ body {
   padding: 20px;
 }
 
+/* Админка: контент с верха экрана, не по центру по вертикали */
+#root:has(.admin-console) {
+  align-items: flex-start;
+}
+
 .app {
   width: min(640px, 100%);
   text-align: center;
@@ -95,6 +100,30 @@ body {
 
 .app-header {
   width: 100%;
+}
+
+.app-header-game {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.game-header-top-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 14px;
+  width: 100%;
+}
+
+.game-header-top-row .game-title {
+  margin: 0;
+}
+
+.game-header-top-row .mode-badge {
+  margin: 0;
 }
 
 /* Viewport-fixed: .app is a centered column; absolute top/right would anchor to that column */
@@ -285,6 +314,10 @@ header p {
   font-variant-numeric: tabular-nums;
 }
 
+.app-header-game .live-round-countdown {
+  margin-top: 0;
+}
+
 .live-round-countdown-label {
   font-weight: 600;
 }
@@ -299,6 +332,56 @@ header p {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
+}
+
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 16px) 20px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.confirm-dialog {
+  width: min(100%, 380px);
+  padding: 22px 20px 20px;
+  border-radius: 12px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.confirm-dialog-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+
+.confirm-dialog-hint {
+  margin: 12px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--page-muted);
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.confirm-dialog-actions .primary-action,
+.confirm-dialog-actions .secondary {
+  flex: 1 1 auto;
+  min-width: min(140px, 100%);
 }
 
 .help-disclosure {
@@ -680,7 +763,6 @@ header p {
   }
 }
 
-.admin-footer-link,
 .admin-back-link {
   color: var(--page-muted);
   font-size: 0.9rem;
@@ -689,7 +771,6 @@ header p {
   text-underline-offset: 3px;
 }
 
-.admin-footer-link:hover,
 .admin-back-link:hover {
   color: var(--page-text);
 }
@@ -713,6 +794,41 @@ header p {
 
 .admin-console {
   text-align: left;
+}
+
+.admin-top-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.admin-top-bar-left {
+  justify-self: start;
+}
+
+.admin-top-bar-right {
+  justify-self: end;
+}
+
+.admin-top-bar-home {
+  margin: 0;
+  text-align: left;
+}
+
+.admin-settings-icon-btn {
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.admin-settings-gear-svg {
+  display: block;
 }
 
 .admin-console header {
@@ -761,11 +877,47 @@ header p {
   margin-right: auto;
 }
 
-.admin-toolbar {
+.admin-settings-panel {
+  margin: 20px auto 0;
+  max-width: 420px;
+  padding: 16px 0 8px;
+  border-top: 1px solid var(--panel-border);
+}
+
+.admin-settings-icon-btn.admin-settings-toggle-active {
+  border-color: var(--page-muted);
+  background: var(--chip-bg);
+}
+
+.admin-password-section {
+  margin: 0 auto;
+  max-width: 420px;
+}
+
+.admin-subsection-title {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--page-text);
+}
+
+.admin-password-change-form {
+  margin-top: 0;
+}
+
+.admin-password-success {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--message-text);
+}
+
+.admin-suggestions-section {
+  margin-top: 24px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
 }
 
 .admin-list-error {

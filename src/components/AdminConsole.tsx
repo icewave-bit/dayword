@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useAtomValue } from 'jotai'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAtom, useAtomValue } from 'jotai'
 import {
   adminApproveSuggestion,
   adminDismissSuggestion,
@@ -9,9 +9,11 @@ import {
   type AdminMeState,
   type AdminSuggestion,
 } from '../lib/api'
-import { localeAtom } from '../atoms'
+import { adminSettingsOpenAtom, adminSuggestionsLangTabAtom, localeAtom } from '../atoms'
 import type { Locale } from '../lib/i18n'
 import { t } from '../lib/i18n'
+import { AdminChangePasswordForm } from './AdminChangePasswordForm'
+import { SegmentTabs } from './SegmentTabs'
 
 function displayWord(_lang: 'ru' | 'en', stored: string): string {
   return stored.toUpperCase()
@@ -23,8 +25,30 @@ function formatWhen(locale: Locale, unix: number | null): string {
   return d.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US')
 }
 
+function AdminSettingsGearIcon() {
+  return (
+    <svg
+      className="admin-settings-gear-svg"
+      width={22}
+      height={22}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+    </svg>
+  )
+}
+
 export function AdminConsole() {
   const locale = useAtomValue(localeAtom)
+  const [suggestionsLangTab, setSuggestionsLangTab] = useAtom(adminSuggestionsLangTabAtom)
+  const [adminSettingsOpen, setAdminSettingsOpen] = useAtom(adminSettingsOpenAtom)
   const c = t(locale)
   const [me, setMe] = useState<AdminMeState | null>(null)
   const [bootErr, setBootErr] = useState(false)
@@ -76,6 +100,11 @@ export function AdminConsole() {
 
   const rowKey = (x: AdminSuggestion) => `${x.lang}:${x.word}`
 
+  const filteredItems = useMemo(
+    () => items.filter((x) => x.lang === suggestionsLangTab),
+    [items, suggestionsLangTab],
+  )
+
   const onApprove = (x: AdminSuggestion) => {
     const k = rowKey(x)
     setBusyKey(k)
@@ -97,6 +126,11 @@ export function AdminConsole() {
   if (me === null && !bootErr) {
     return (
       <main className="app admin-console">
+        <div className="admin-top-bar">
+          <a href="#/" className="admin-back-link admin-top-bar-home">
+            {c.adminHome}
+          </a>
+        </div>
         <p className="message">{c.loadingGame}</p>
       </main>
     )
@@ -105,13 +139,13 @@ export function AdminConsole() {
   if (bootErr || me === null) {
     return (
       <main className="app admin-console">
+        <div className="admin-top-bar">
+          <a href="#/" className="admin-back-link admin-top-bar-home">
+            {c.adminHome}
+          </a>
+        </div>
         <header>
           <h1>{c.adminTitle}</h1>
-          <p>
-            <a href="#/login" className="admin-back-link">
-              {c.authHubTitle}
-            </a>
-          </p>
         </header>
         <p className="message">{c.adminLoadError}</p>
         <button type="button" className="primary-action" onClick={() => void refreshMe()}>
@@ -124,6 +158,11 @@ export function AdminConsole() {
   if (!me.encryptionConfigured || !me.authed) {
     return (
       <main className="app admin-console">
+        <div className="admin-top-bar">
+          <a href="#/" className="admin-back-link admin-top-bar-home">
+            {c.adminHome}
+          </a>
+        </div>
         <p className="message">{c.loadingGame}</p>
       </main>
     )
@@ -131,41 +170,64 @@ export function AdminConsole() {
 
   return (
     <main className="app admin-console">
+      <div className="admin-top-bar">
+        <div className="admin-top-bar-left">
+          <a href="#/" className="admin-back-link admin-top-bar-home">
+            {c.adminHome}
+          </a>
+        </div>
+        <button
+          type="button"
+          className={`secondary admin-settings-icon-btn${adminSettingsOpen ? ' admin-settings-toggle-active' : ''}`.trim()}
+          aria-expanded={adminSettingsOpen}
+          aria-controls="admin-settings-panel"
+          aria-label={adminSettingsOpen ? c.adminCloseSettingsPanel : c.changeSettings}
+          onClick={() => setAdminSettingsOpen((o) => !o)}
+        >
+          <AdminSettingsGearIcon />
+        </button>
+        <div className="admin-top-bar-right">
+          <button type="button" className="secondary" onClick={onLogout}>
+            {c.adminLogout}
+          </button>
+        </div>
+      </div>
+
       <header>
         <h1>{c.adminTitle}</h1>
-        <p>
-          <a href="#/" className="admin-back-link">
-            {c.adminBackToGame}
-          </a>
-        </p>
       </header>
 
-      <div className="admin-toolbar">
-        <button type="button" className="secondary" onClick={onLogout}>
-          {c.adminLogout}
-        </button>
-        <button type="button" className="secondary" onClick={() => loadList()}>
-          {c.retryLoad}
-        </button>
-        <a className="admin-footer-link" href="#/login">
-          {c.authHubTitle}
-        </a>
+      {adminSettingsOpen ? (
+        <div id="admin-settings-panel" className="admin-settings-panel">
+          <AdminChangePasswordForm />
+        </div>
+      ) : null}
+
+      <div className="admin-suggestions-section">
+        <SegmentTabs
+          ariaLabel={c.adminSuggestionsTabsLabel}
+          value={suggestionsLangTab}
+          onChange={setSuggestionsLangTab}
+          options={[
+            { value: 'ru', label: c.langRu },
+            { value: 'en', label: c.langEn },
+          ]}
+        />
       </div>
       {listErr ? <p className="message admin-list-error">{c.adminLoadError}</p> : null}
       {items.length === 0 ? (
         <p className="message">{c.adminEmptyList}</p>
+      ) : filteredItems.length === 0 ? (
+        <p className="message">{c.adminEmptyListForLang}</p>
       ) : (
         <ul className="admin-suggestion-list">
-          {items.map((x) => {
+          {filteredItems.map((x) => {
             const k = rowKey(x)
             const busy = busyKey === k
             return (
               <li key={k} className="admin-suggestion-row">
                 <div className="admin-suggestion-meta">
                   <span className="admin-suggestion-word">{displayWord(x.lang, x.word)}</span>
-                  <span className="admin-suggestion-lang">
-                    {c.adminLang}: {x.lang.toUpperCase()}
-                  </span>
                   <span className="admin-suggestion-time">
                     {c.adminSuggestedAt}: {formatWhen(locale, x.suggestedAt)}
                   </span>

@@ -33,6 +33,12 @@ export type Copy = {
   enterKey: string
   backspaceKey: string
   changeSettings: string
+  /** Кнопка выхода из экрана игры в настройки */
+  exitGameScreen: string
+  exitGameConfirmTitle: string
+  exitGameConfirmHint: string
+  exitGameConfirmStay: string
+  exitGameConfirmLeave: string
   loadingGame: string
   loadFailed: string
   retryLoad: string
@@ -55,7 +61,21 @@ export type Copy = {
   adminApprove: string
   adminDismiss: string
   adminBackToGame: string
+  /** Ссылка на главный экран из админки */
+  adminHome: string
   adminLoadError: string
+  adminChangePasswordTitle: string
+  adminCurrentPassword: string
+  adminNewPassword: string
+  adminChangePasswordSubmit: string
+  adminPasswordChangeSuccess: string
+  adminWrongCurrentPassword: string
+  adminBadNewPassword: string
+  adminPasswordChangeGenericError: string
+  adminSuggestionsTabsLabel: string
+  adminEmptyListForLang: string
+  /** Свернуть панель настроек в админке */
+  adminCloseSettingsPanel: string
   adminEncryptionMissing: string
   adminFirstRunTitle: string
   adminFirstRunHint: string
@@ -107,7 +127,7 @@ const copy: Record<Locale, Copy> = {
     subtitleLive: (n) =>
       `Одно слово на всех, обновление каждые 3 часа. ${n} букв, 6 попыток.`,
     subtitlePractice: (n) => `Случайное слово только для вас. ${n} букв, 6 попыток.`,
-    modeLiveBadge: 'Общий раунд · 3 ч',
+    modeLiveBadge: 'Турнир',
     modePracticeBadge: 'Тренировка',
     liveRoundCountdownLabel: 'Новое слово через',
     newGameLive: 'Сбросить попытки',
@@ -131,6 +151,12 @@ const copy: Record<Locale, Copy> = {
     enterKey: 'Enter',
     backspaceKey: 'Стереть',
     changeSettings: 'Настройки',
+    exitGameScreen: 'Выйти',
+    exitGameConfirmTitle: 'Выйти из игры?',
+    exitGameConfirmHint:
+      'Прогресс этой партии сохранится, вы вернётесь в меню. Продолжить выход?',
+    exitGameConfirmStay: 'Остаться',
+    exitGameConfirmLeave: 'Выйти',
     loadingGame: 'Загрузка слова из словаря…',
     loadFailed: 'Не удалось загрузить словарь. Проверьте API и БД.',
     retryLoad: 'Повторить',
@@ -139,7 +165,7 @@ const copy: Record<Locale, Copy> = {
     suggestSent: 'Спасибо, слово отправлено на проверку',
     suggestDuplicate: 'Это слово уже в списке предложенных',
     suggestError: (code) => `Не удалось отправить (${code})`,
-    adminTitle: 'Админ: предложенные слова',
+    adminTitle: 'Админ',
     adminLoginUser: 'Логин',
     adminLoginPass: 'Пароль',
     adminLoginSubmit: 'Войти',
@@ -153,7 +179,19 @@ const copy: Record<Locale, Copy> = {
     adminApprove: 'В словарь',
     adminDismiss: 'Отклонить',
     adminBackToGame: 'К игре',
+    adminHome: 'Домой',
     adminLoadError: 'Ошибка загрузки',
+    adminChangePasswordTitle: 'Смена пароля администратора',
+    adminCurrentPassword: 'Текущий пароль',
+    adminNewPassword: 'Новый пароль',
+    adminChangePasswordSubmit: 'Сохранить пароль',
+    adminPasswordChangeSuccess: 'Пароль обновлён.',
+    adminWrongCurrentPassword: 'Неверный текущий пароль',
+    adminBadNewPassword: 'Новый пароль: от 1 до 256 символов',
+    adminPasswordChangeGenericError: 'Не удалось сменить пароль',
+    adminSuggestionsTabsLabel: 'Язык списка предложений',
+    adminEmptyListForLang: 'Для этого языка нет предложенных слов',
+    adminCloseSettingsPanel: 'Свернуть настройки',
     adminEncryptionMissing:
       'На сервере не задан ADMIN_ENCRYPTION_KEY (64 hex-символа). Без ключа админка не работает.',
     adminFirstRunTitle: 'Первый вход: создайте администратора',
@@ -228,6 +266,12 @@ const copy: Record<Locale, Copy> = {
     enterKey: 'Enter',
     backspaceKey: 'Backspace',
     changeSettings: 'Settings',
+    exitGameScreen: 'Exit',
+    exitGameConfirmTitle: 'Leave the game?',
+    exitGameConfirmHint:
+      'Your progress in this round is saved. You will return to the menu. Leave anyway?',
+    exitGameConfirmStay: 'Stay',
+    exitGameConfirmLeave: 'Exit',
     loadingGame: 'Loading word from dictionary…',
     loadFailed: 'Could not load dictionary. Check API and database.',
     retryLoad: 'Retry',
@@ -236,7 +280,7 @@ const copy: Record<Locale, Copy> = {
     suggestSent: 'Thanks — word submitted for review',
     suggestDuplicate: 'This word is already in the suggestion list',
     suggestError: (code) => `Could not submit (${code})`,
-    adminTitle: 'Admin: suggested words',
+    adminTitle: 'Admin',
     adminLoginUser: 'Username',
     adminLoginPass: 'Password',
     adminLoginSubmit: 'Sign in',
@@ -250,7 +294,19 @@ const copy: Record<Locale, Copy> = {
     adminApprove: 'Add to dictionary',
     adminDismiss: 'Dismiss',
     adminBackToGame: 'Back to game',
+    adminHome: 'Home',
     adminLoadError: 'Load error',
+    adminChangePasswordTitle: 'Change administrator password',
+    adminCurrentPassword: 'Current password',
+    adminNewPassword: 'New password',
+    adminChangePasswordSubmit: 'Save password',
+    adminPasswordChangeSuccess: 'Password updated.',
+    adminWrongCurrentPassword: 'Current password is incorrect',
+    adminBadNewPassword: 'New password: 1–256 characters',
+    adminPasswordChangeGenericError: 'Could not change password',
+    adminSuggestionsTabsLabel: 'Suggestion list language',
+    adminEmptyListForLang: 'No suggested words for this language',
+    adminCloseSettingsPanel: 'Close settings',
     adminEncryptionMissing:
       'ADMIN_ENCRYPTION_KEY (64 hex chars) is not set on the server. Admin UI cannot run without it.',
     adminFirstRunTitle: 'First-time setup: create administrator',
