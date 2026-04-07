@@ -295,7 +295,6 @@ export function AuthHubScreen() {
 
               {userTab === 'login' ? (
                 <form className="setup-panel admin-login-form" onSubmit={onUnifiedLogin}>
-                  <p className="admin-first-run-hint">{c.authUnifiedSignInHint}</p>
                   <label className="field">
                     <span>{c.userNickname}</span>
                     <input

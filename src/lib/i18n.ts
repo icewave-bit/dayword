@@ -85,7 +85,6 @@ export type Copy = {
   adminAlreadyRegistered: string
   userAccountLink: string
   authHubTitle: string
-  authUnifiedSignInHint: string
   adminSessionActiveHub: string
   adminGotoPanel: string
   userLoginTab: string
@@ -202,8 +201,6 @@ const copy: Record<Locale, Copy> = {
     adminAlreadyRegistered: 'Учётная запись уже создана — войдите',
     userAccountLink: 'Аккаунт',
     authHubTitle: 'Вход',
-    authUnifiedSignInHint:
-      'Те же поля для игрока и администратора: при верных данных админа откроется панель, иначе выполняется вход в игру.',
     adminSessionActiveHub: 'Сессия администратора активна.',
     adminGotoPanel: 'Панель предложений',
     userLoginTab: 'Вход',
@@ -317,8 +314,6 @@ const copy: Record<Locale, Copy> = {
     adminAlreadyRegistered: 'An account already exists — sign in instead',
     userAccountLink: 'Account',
     authHubTitle: 'Sign in',
-    authUnifiedSignInHint:
-      'Same fields for player and admin: correct admin credentials open the panel; otherwise we sign you into the game.',
     adminSessionActiveHub: 'Administrator session is active.',
     adminGotoPanel: 'Suggestion panel',
     userLoginTab: 'Sign in',
