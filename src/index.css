@@ -912,12 +912,403 @@ header p {
   color: var(--message-text);
 }
 
+.admin-main-section-tabs {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+}
+
 .admin-suggestions-section {
   margin-top: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
+}
+
+.admin-import-panel {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+.admin-import-hint {
+  text-align: center;
+  max-width: 36rem;
+}
+
+.admin-import-lang-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.admin-import-field {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-import-label {
+  font-size: 0.92rem;
+  color: var(--page-muted);
+}
+
+.admin-import-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--page-text);
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.admin-import-file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  justify-content: center;
+}
+
+.admin-import-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.admin-import-file-label {
+  cursor: pointer;
+  margin: 0;
+}
+
+.admin-import-file-hint {
+  font-size: 0.85rem;
+  color: var(--page-muted);
+}
+
+.admin-import-result {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.admin-import-result-grid {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+@media (min-width: 900px) {
+  .admin-import-result-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+.admin-import-result-block {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-import-result-heading {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--page-text);
+}
+
+.admin-import-result-empty {
+  margin: 0;
+  color: var(--page-muted);
+  font-size: 0.9rem;
+}
+
+.admin-import-word-list {
+  margin: 0;
+  padding: 0 0 0 1.1rem;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 0.88rem;
+  color: var(--page-text);
+}
+
+.admin-import-meta {
+  color: var(--page-muted);
+  font-weight: 400;
+}
+
+.admin-import-raw {
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.admin-dictionary-panel {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 52rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.admin-dictionary-intro {
+  text-align: center;
+  max-width: 32rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.admin-dictionary-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.admin-dictionary-lang-row,
+.admin-dictionary-length-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.admin-dictionary-letter-toolbar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.admin-dictionary-letter-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.admin-dictionary-letter-btn {
+  min-width: 1.65rem;
+  height: 1.65rem;
+  padding: 0 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 6px;
+}
+
+.admin-dictionary-letter-all {
+  align-self: center;
+  min-width: auto;
+  height: auto;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+}
+
+.admin-dictionary-letter-btn-active {
+  border-color: var(--page-text);
+  color: var(--page-text);
+  background: color-mix(in srgb, var(--page-text) 12%, transparent);
+}
+
+.admin-dictionary-search {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-dictionary-search-label {
+  font-size: 0.8rem;
+  color: var(--page-muted);
+  text-align: center;
+}
+
+.admin-dictionary-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.admin-dictionary-search-input {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--page-text);
+  font-family: inherit;
+  font-size: 0.88rem;
+}
+
+.admin-dictionary-search-submit,
+.admin-dictionary-search-clear {
+  flex-shrink: 0;
+  padding: 7px 12px;
+  font-size: 0.8rem;
+}
+
+.admin-dictionary-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  width: 100%;
+}
+
+.admin-dictionary-page-btn {
+  padding: 6px 12px;
+  font-size: 0.82rem;
+}
+
+.admin-dictionary-page-info {
+  font-size: 0.78rem;
+  color: var(--page-muted);
+  text-align: center;
+  line-height: 1.3;
+  min-width: min(100%, 12rem);
+}
+
+.admin-dictionary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  align-items: start;
+}
+
+@media (min-width: 520px) {
+  .admin-dictionary-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.admin-dictionary-row {
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+}
+
+.admin-dictionary-row:has(.admin-dictionary-edit) {
+  grid-column: 1 / -1;
+}
+
+.admin-dictionary-view {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-dictionary-word {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--page-text);
+  min-width: 0;
+  word-break: break-word;
+}
+
+.admin-dictionary-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.admin-dictionary-btn-compact {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+}
+
+.admin-dictionary-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--page-text);
+}
+
+.admin-dictionary-icon-btn:disabled {
+  opacity: 0.45;
+}
+
+.admin-dictionary-icon-svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.admin-dictionary-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-dictionary-edit-label {
+  font-size: 0.8rem;
+  color: var(--page-muted);
+}
+
+.admin-dictionary-input {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--page-text);
+  font-family: inherit;
+  font-size: 0.92rem;
+}
+
+.admin-dictionary-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .admin-list-error {

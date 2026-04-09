@@ -9,10 +9,17 @@ import {
   type AdminMeState,
   type AdminSuggestion,
 } from '../lib/api'
-import { adminSettingsOpenAtom, adminSuggestionsLangTabAtom, localeAtom } from '../atoms'
+import {
+  adminConsoleSectionAtom,
+  adminSettingsOpenAtom,
+  adminSuggestionsLangTabAtom,
+  localeAtom,
+} from '../atoms'
 import type { Locale } from '../lib/i18n'
 import { t } from '../lib/i18n'
 import { AdminChangePasswordForm } from './AdminChangePasswordForm'
+import { AdminDictionaryWordsPanel } from './AdminDictionaryWords'
+import { AdminImportWordsPanel } from './AdminImportWords'
 import { SegmentTabs } from './SegmentTabs'
 
 function displayWord(_lang: 'ru' | 'en', stored: string): string {
@@ -47,6 +54,7 @@ function AdminSettingsGearIcon() {
 
 export function AdminConsole() {
   const locale = useAtomValue(localeAtom)
+  const [adminSection, setAdminSection] = useAtom(adminConsoleSectionAtom)
   const [suggestionsLangTab, setSuggestionsLangTab] = useAtom(adminSuggestionsLangTabAtom)
   const [adminSettingsOpen, setAdminSettingsOpen] = useAtom(adminSettingsOpenAtom)
   const c = t(locale)
@@ -203,57 +211,78 @@ export function AdminConsole() {
         </div>
       ) : null}
 
-      <div className="admin-suggestions-section">
+      <div className="admin-main-section-tabs">
         <SegmentTabs
-          ariaLabel={c.adminSuggestionsTabsLabel}
-          value={suggestionsLangTab}
-          onChange={setSuggestionsLangTab}
+          ariaLabel={c.adminConsoleMainTabsLabel}
+          value={adminSection}
+          onChange={setAdminSection}
           options={[
-            { value: 'ru', label: c.langRu },
-            { value: 'en', label: c.langEn },
+            { value: 'suggestions', label: c.adminTabSuggestions },
+            { value: 'import', label: c.adminTabImport },
+            { value: 'dictionary', label: c.adminTabDictionary },
           ]}
         />
       </div>
-      {listErr ? <p className="message admin-list-error">{c.adminLoadError}</p> : null}
-      {items.length === 0 ? (
-        <p className="message">{c.adminEmptyList}</p>
-      ) : filteredItems.length === 0 ? (
-        <p className="message">{c.adminEmptyListForLang}</p>
+
+      {adminSection === 'import' ? (
+        <AdminImportWordsPanel locale={locale} />
+      ) : adminSection === 'dictionary' ? (
+        <AdminDictionaryWordsPanel locale={locale} />
       ) : (
-        <ul className="admin-suggestion-list">
-          {filteredItems.map((x) => {
-            const k = rowKey(x)
-            const busy = busyKey === k
-            return (
-              <li key={k} className="admin-suggestion-row">
-                <div className="admin-suggestion-meta">
-                  <span className="admin-suggestion-word">{displayWord(x.lang, x.word)}</span>
-                  <span className="admin-suggestion-time">
-                    {c.adminSuggestedAt}: {formatWhen(locale, x.suggestedAt)}
-                  </span>
-                </div>
-                <div className="admin-suggestion-actions">
-                  <button
-                    type="button"
-                    className="primary-action small"
-                    disabled={busy}
-                    onClick={() => onApprove(x)}
-                  >
-                    {c.adminApprove}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary small"
-                    disabled={busy}
-                    onClick={() => onDismiss(x)}
-                  >
-                    {c.adminDismiss}
-                  </button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <>
+          <div className="admin-suggestions-section">
+            <SegmentTabs
+              ariaLabel={c.adminSuggestionsTabsLabel}
+              value={suggestionsLangTab}
+              onChange={setSuggestionsLangTab}
+              options={[
+                { value: 'ru', label: c.langRu },
+                { value: 'en', label: c.langEn },
+              ]}
+            />
+          </div>
+          {listErr ? <p className="message admin-list-error">{c.adminLoadError}</p> : null}
+          {items.length === 0 ? (
+            <p className="message">{c.adminEmptyList}</p>
+          ) : filteredItems.length === 0 ? (
+            <p className="message">{c.adminEmptyListForLang}</p>
+          ) : (
+            <ul className="admin-suggestion-list">
+              {filteredItems.map((x) => {
+                const k = rowKey(x)
+                const busy = busyKey === k
+                return (
+                  <li key={k} className="admin-suggestion-row">
+                    <div className="admin-suggestion-meta">
+                      <span className="admin-suggestion-word">{displayWord(x.lang, x.word)}</span>
+                      <span className="admin-suggestion-time">
+                        {c.adminSuggestedAt}: {formatWhen(locale, x.suggestedAt)}
+                      </span>
+                    </div>
+                    <div className="admin-suggestion-actions">
+                      <button
+                        type="button"
+                        className="primary-action small"
+                        disabled={busy}
+                        onClick={() => onApprove(x)}
+                      >
+                        {c.adminApprove}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary small"
+                        disabled={busy}
+                        onClick={() => onDismiss(x)}
+                      >
+                        {c.adminDismiss}
+                      </button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </>
       )}
     </main>
   )

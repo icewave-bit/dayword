@@ -323,6 +323,171 @@ export async function adminDismissSuggestion(
   if (!res.ok) throw new Error('dismiss_failed')
 }
 
+export type AdminImportInvalidItem = {
+  raw: string
+  reason: 'empty' | 'bad_length' | 'bad_line' | 'insert_failed'
+}
+
+export type AdminImportExistingItem = {
+  word: string
+  source: string
+}
+
+export type AdminImportWordsResult =
+  | {
+      ok: true
+      added: string[]
+      alreadyInDatabase: AdminImportExistingItem[]
+      invalid: AdminImportInvalidItem[]
+      counts: {
+        added: number
+        alreadyInDatabase: number
+        invalid: number
+      }
+    }
+  | {
+      ok: false
+      error: string
+      maxLines?: number
+      added: string[]
+      alreadyInDatabase: AdminImportExistingItem[]
+      invalid: AdminImportInvalidItem[]
+    }
+
+export async function adminImportWords(
+  params: { lang: 'ru' | 'en'; text: string },
+  signal?: AbortSignal,
+): Promise<AdminImportWordsResult> {
+  const base = apiBase()
+  const res = await fetch(`${base}/api/admin/words/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lang: params.lang, text: params.text }),
+    ...credFetch,
+    signal,
+  })
+  const data = (await res.json().catch(() => ({}))) as AdminImportWordsResult & {
+    error?: string
+    maxLines?: number
+  }
+  if (res.status === 401) throw new Error('unauthorized')
+  if (res.status === 400) {
+    if (data && typeof data === 'object' && 'ok' in data && data.ok === false) {
+      return data as AdminImportWordsResult
+    }
+    throw new Error('import_failed')
+  }
+  if (!res.ok) throw new Error('import_failed')
+  if (!data || data.ok !== true || !Array.isArray(data.added)) throw new Error('invalid_response')
+  if (!data.counts || typeof data.counts.added !== 'number') throw new Error('invalid_response')
+  return data as AdminImportWordsResult
+}
+
+export type AdminDictionaryWordsPage = {
+  items: string[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export async function adminListDictionaryWords(
+  params: {
+    lang: 'ru' | 'en'
+    length: WordLength
+    limit?: number
+    offset?: number
+    /** Одна буква (en/ru), фильтр word LIKE prefix% */
+    prefix?: string | null
+    /** Подстрока в слове (сервер нормализует) */
+    q?: string | null
+  },
+  signal?: AbortSignal,
+): Promise<AdminDictionaryWordsPage> {
+  const base = apiBase()
+  const q = new URLSearchParams({
+    lang: params.lang,
+    length: String(params.length),
+    limit: String(params.limit ?? 200),
+    offset: String(params.offset ?? 0),
+  })
+  if (params.prefix && params.prefix.length > 0) {
+    q.set('prefix', params.prefix)
+  }
+  if (params.q && params.q.trim() !== '') {
+    q.set('q', params.q.trim())
+  }
+  const res = await fetch(`${base}/api/admin/dictionary/words?${q}`, { ...credFetch, signal })
+  if (res.status === 401) throw new Error('unauthorized')
+  if (!res.ok) throw new Error('dictionary_list_failed')
+  const data = (await res.json()) as {
+    ok?: boolean
+    items?: string[]
+    total?: number
+    limit?: number
+    offset?: number
+  }
+  if (!data.ok || !Array.isArray(data.items) || typeof data.total !== 'number') {
+    throw new Error('invalid_response')
+  }
+  return {
+    items: data.items,
+    total: data.total,
+    limit: typeof data.limit === 'number' ? data.limit : 200,
+    offset: typeof data.offset === 'number' ? data.offset : 0,
+  }
+}
+
+export async function adminDeleteDictionaryWord(
+  lang: 'ru' | 'en',
+  word: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const base = apiBase()
+  const res = await fetch(`${base}/api/admin/dictionary/words`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lang, word }),
+    ...credFetch,
+    signal,
+  })
+  if (res.status === 401) throw new Error('unauthorized')
+  if (res.status === 404) throw new Error('not_found')
+  if (!res.ok) throw new Error('dictionary_delete_failed')
+}
+
+export async function adminUpdateDictionaryWord(
+  params: { lang: 'ru' | 'en'; word: string; newWord: string },
+  signal?: AbortSignal,
+): Promise<{ word: string }> {
+  const base = apiBase()
+  const res = await fetch(`${base}/api/admin/dictionary/words`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lang: params.lang,
+      word: params.word,
+      newWord: params.newWord,
+    }),
+    ...credFetch,
+    signal,
+  })
+  if (res.status === 401) throw new Error('unauthorized')
+  if (res.status === 404) throw new Error('not_found')
+  if (res.status === 409) throw new Error('conflict')
+  if (res.status === 400) {
+    const err = await res.json().catch(() => ({}))
+    const code =
+      typeof err === 'object' && err && 'error' in err
+        ? String((err as { error?: string }).error)
+        : 'bad_request'
+    throw new Error(code)
+  }
+  if (!res.ok) throw new Error('dictionary_update_failed')
+  const data = (await res.json()) as { ok?: boolean; word?: string }
+  if (!data.ok || typeof data.word !== 'string') throw new Error('invalid_response')
+  return { word: data.word }
+}
+
 export type AppUser = { id: number; username: string }
 
 export async function userMe(signal?: AbortSignal): Promise<{

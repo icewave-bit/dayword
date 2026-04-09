@@ -26,8 +26,31 @@ export const settingsOpenAtom = atom(false)
 /** Подтверждение выхода из экрана игры в меню */
 export const exitGameConfirmOpenAtom = atom(false)
 
+/** Раздел админки: предложения, импорт, слова в словаре. */
+export const adminConsoleSectionAtom = atom<'suggestions' | 'import' | 'dictionary'>(
+  'suggestions',
+)
+
 /** Вкладка языка в админке: список предложенных слов. */
 export const adminSuggestionsLangTabAtom = atom<'ru' | 'en'>('ru')
+
+/** Язык словаря при импорте слов (отдельно от фильтра списка предложений). */
+export const adminImportTargetLangAtom = atom<'ru' | 'en'>('ru')
+
+/** Язык списка слов в разделе «Слова в базе». */
+export const adminDictionaryLangAtom = atom<'ru' | 'en'>('ru')
+
+/** Длина слов (группа) в разделе «Слова в базе». */
+export const adminDictionaryLengthAtom = atom<WordLength>(5)
+
+/** Страница списка слов (1-based). Сбрасывается при смене языка/длины. */
+export const adminDictionaryPageAtom = atom(1)
+
+/** Первая буква фильтра (нижний регистр одного символа) или весь список. */
+export const adminDictionaryPrefixAtom = atom<string | null>(null)
+
+/** Подстрока поиска (как на сервере: нормализованный нижний регистр). */
+export const adminDictionarySearchAppliedAtom = atom<string>('')
 
 /** Панель настроек админки (смена пароля и т.п.). */
 export const adminSettingsOpenAtom = atom(false)

@@ -45,7 +45,14 @@ app.use(
     credentials: corsCredentials,
   }),
 )
-app.use(express.json({ limit: '32kb' }))
+const jsonBodyDefault = express.json({ limit: '32kb' })
+const jsonBodyAdminImport = express.json({ limit: '2mb' })
+app.use((req, res, next) => {
+  if (req.method === 'POST' && req.path === '/api/admin/words/import') {
+    return jsonBodyAdminImport(req, res, next)
+  }
+  return jsonBodyDefault(req, res, next)
+})
 
 if (debugGameCheck) {
   app.use((req, res, next) => {
@@ -475,6 +482,147 @@ const dismissWord = db.prepare(
   `UPDATE words SET source = 'dismissed', suggested_at = NULL
    WHERE language_code = ? AND word = ? AND (${DICT_SOURCE}) = 'suggested'`,
 )
+
+const insertDictionaryWord = db.prepare(
+  `INSERT INTO words (language_code, word, source, suggested_at)
+   VALUES (?, ?, 'dictionary', NULL)`,
+)
+
+const deleteDictionaryWord = db.prepare(
+  `DELETE FROM words
+   WHERE language_code = ? AND word = ? AND (${DICT_SOURCE}) = 'dictionary'`,
+)
+
+const ADMIN_IMPORT_MAX_LINES = 20_000
+const ADMIN_DICTIONARY_PAGE_MAX = 500
+const ADMIN_DICTIONARY_SEARCH_MAX = 64
+
+/**
+ * Одна допустимая первая буква для фильтра списка (en: a–z, ru: а–я + ё).
+ */
+function parseAdminDictionaryPrefix(lang, raw) {
+  if (raw === undefined || raw === null) return null
+  if (typeof raw !== 'string') return null
+  const s = String(raw).trim().toLowerCase()
+  if (s.length !== 1) return null
+  const cp = s.codePointAt(0)
+  if (lang === 'en') {
+    if (cp >= 0x61 && cp <= 0x7a) return s
+    return null
+  }
+  if (lang === 'ru') {
+    if ((cp >= 0x0430 && cp <= 0x044f) || cp === 0x0451) return s
+    return null
+  }
+  return null
+}
+
+/** Подстрока поиска по полю word (нижний регистр в БД). */
+function parseAdminDictionarySearchNeedle(lang, raw) {
+  if (typeof raw !== 'string') return null
+  const n = lang === 'ru' ? normalizeRuLower(raw) : normalizeEnLower(raw)
+  if (!n) return null
+  if (n.length > ADMIN_DICTIONARY_SEARCH_MAX) return n.slice(0, ADMIN_DICTIONARY_SEARCH_MAX)
+  return n
+}
+
+function adminDictionaryListWhere(lang, length, prefix, needle) {
+  const parts = [
+    'language_code = ?',
+    'length(word) = ?',
+    `(${DICT_SOURCE}) = 'dictionary'`,
+  ]
+  const params = [lang, length]
+  if (prefix) {
+    parts.push('word LIKE ?')
+    params.push(`${prefix}%`)
+  }
+  if (needle) {
+    parts.push('INSTR(word, ?) > 0')
+    params.push(needle)
+  }
+  return { whereSql: parts.join(' AND '), params }
+}
+
+/**
+ * Импорт слов в playable-словарь (source=dictionary). Уже существующие строки в `words`
+ * для той же пары (lang, нормализованное слово) пропускаются с отчётом.
+ */
+function runAdminWordsImport(lang, rawLines) {
+  const added = []
+  const alreadyInDatabase = []
+  const invalid = []
+
+  const lines = Array.isArray(rawLines) ? rawLines : []
+  if (lines.length > ADMIN_IMPORT_MAX_LINES) {
+    return {
+      ok: false,
+      error: 'too_many_lines',
+      maxLines: ADMIN_IMPORT_MAX_LINES,
+      added: [],
+      alreadyInDatabase: [],
+      invalid: [],
+    }
+  }
+
+  const tx = db.transaction(() => {
+    for (let i = 0; i < lines.length; i += 1) {
+      const rawLine = lines[i]
+      if (typeof rawLine !== 'string') {
+        invalid.push({ raw: String(rawLine), reason: 'bad_line' })
+        continue
+      }
+      const asLower = lang === 'ru' ? normalizeRuLower(rawLine) : normalizeEnLower(rawLine)
+      const asUpper = lang === 'ru' ? normalizeRuUpper(rawLine) : normalizeEnUpper(rawLine)
+      if (!asLower) {
+        invalid.push({ raw: rawLine.trim() || '(empty)', reason: 'empty' })
+        continue
+      }
+      const len = [...asLower].length
+      if (len < 4 || len > 6) {
+        invalid.push({ raw: rawLine.trim(), reason: 'bad_length' })
+        continue
+      }
+      const storeWord = asLower
+      const row = stmtRowWordAndSource.get(lang, asLower, asUpper)
+      if (row) {
+        alreadyInDatabase.push({
+          word: String(storeWord).toUpperCase(),
+          source: row.src,
+        })
+        continue
+      }
+      try {
+        insertDictionaryWord.run(lang, storeWord)
+        added.push(String(storeWord).toUpperCase())
+      } catch (e) {
+        if (String(e?.message ?? e).includes('UNIQUE')) {
+          const again = stmtRowWordAndSource.get(lang, asLower, asUpper)
+          alreadyInDatabase.push({
+            word: String(storeWord).toUpperCase(),
+            source: again?.src ?? 'unknown',
+          })
+        } else {
+          invalid.push({ raw: rawLine.trim(), reason: 'insert_failed' })
+        }
+      }
+    }
+  })
+
+  tx()
+
+  return {
+    ok: true,
+    added,
+    alreadyInDatabase,
+    invalid,
+    counts: {
+      added: added.length,
+      alreadyInDatabase: alreadyInDatabase.length,
+      invalid: invalid.length,
+    },
+  }
+}
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
@@ -1042,6 +1190,140 @@ app.post('/api/admin/suggestions/dismiss', requireAdmin, (req, res) => {
     return
   }
   res.json({ ok: true })
+})
+
+app.post('/api/admin/words/import', requireAdmin, (req, res) => {
+  const lang = parseLang(req.body?.lang)
+  const text = req.body?.text
+  const linesRaw = req.body?.lines
+  if (!lang) {
+    res.status(400).json({ error: 'bad_request' })
+    return
+  }
+  let lines
+  if (Array.isArray(linesRaw)) {
+    lines = linesRaw
+  } else if (typeof text === 'string') {
+    lines = text.split(/\r\n|\n|\r/)
+  } else {
+    res.status(400).json({ error: 'bad_request' })
+    return
+  }
+  const result = runAdminWordsImport(lang, lines)
+  if (!result.ok) {
+    res.status(400).json(result)
+    return
+  }
+  res.json(result)
+})
+
+app.get('/api/admin/dictionary/words', requireAdmin, (req, res) => {
+  const lang = parseLang(req.query.lang)
+  const length = parseLength(req.query.length)
+  if (!lang || length === null) {
+    res.status(400).json({ error: 'bad_request' })
+    return
+  }
+  let limit = Number(req.query.limit)
+  let offset = Number(req.query.offset)
+  if (!Number.isFinite(limit) || limit < 1) limit = 200
+  if (limit > ADMIN_DICTIONARY_PAGE_MAX) limit = ADMIN_DICTIONARY_PAGE_MAX
+  if (!Number.isFinite(offset) || offset < 0) offset = 0
+  limit = Math.floor(limit)
+  offset = Math.floor(offset)
+
+  const prefix =
+    typeof req.query.prefix === 'string' && req.query.prefix.trim() !== ''
+      ? parseAdminDictionaryPrefix(lang, req.query.prefix)
+      : null
+  const needle =
+    typeof req.query.q === 'string' && req.query.q.trim() !== ''
+      ? parseAdminDictionarySearchNeedle(lang, req.query.q)
+      : null
+
+  const { whereSql, params } = adminDictionaryListWhere(lang, length, prefix, needle)
+  const countRow = db.prepare(`SELECT COUNT(*) AS c FROM words WHERE ${whereSql}`).get(...params)
+  const total = countRow?.c ?? 0
+  const rows = db
+    .prepare(`SELECT word FROM words WHERE ${whereSql} ORDER BY word LIMIT ? OFFSET ?`)
+    .all(...params, limit, offset)
+  const items = rows.map((r) => r.word)
+  res.json({ ok: true, items, total, limit, offset })
+})
+
+app.delete('/api/admin/dictionary/words', requireAdmin, (req, res) => {
+  const lang = parseLang(req.body?.lang)
+  const w = req.body?.word
+  if (!lang || typeof w !== 'string') {
+    res.status(400).json({ error: 'bad_request' })
+    return
+  }
+  const asLower = lang === 'ru' ? normalizeRuLower(w) : normalizeEnLower(w)
+  const asUpper = lang === 'ru' ? normalizeRuUpper(w) : normalizeEnUpper(w)
+  const row = stmtRowWordAndSource.get(lang, asLower, asUpper)
+  if (!row?.word || row.src !== 'dictionary') {
+    res.status(404).json({ error: 'not_found' })
+    return
+  }
+  const info = deleteDictionaryWord.run(lang, row.word)
+  if (info.changes === 0) {
+    res.status(404).json({ error: 'not_found' })
+    return
+  }
+  res.json({ ok: true })
+})
+
+app.patch('/api/admin/dictionary/words', requireAdmin, (req, res) => {
+  const lang = parseLang(req.body?.lang)
+  const wOld = req.body?.word
+  const wNewRaw = req.body?.newWord
+  if (!lang || typeof wOld !== 'string' || typeof wNewRaw !== 'string') {
+    res.status(400).json({ error: 'bad_request' })
+    return
+  }
+  const asLowerOld = lang === 'ru' ? normalizeRuLower(wOld) : normalizeEnLower(wOld)
+  const asUpperOld = lang === 'ru' ? normalizeRuUpper(wOld) : normalizeEnUpper(wOld)
+  const row = stmtRowWordAndSource.get(lang, asLowerOld, asUpperOld)
+  if (!row?.word || row.src !== 'dictionary') {
+    res.status(404).json({ error: 'not_found' })
+    return
+  }
+  const storedOld = row.word
+  const asLowerNew = lang === 'ru' ? normalizeRuLower(wNewRaw) : normalizeEnLower(wNewRaw)
+  const asUpperNew = lang === 'ru' ? normalizeRuUpper(wNewRaw) : normalizeEnUpper(wNewRaw)
+  if (!asLowerNew) {
+    res.status(400).json({ error: 'bad_request' })
+    return
+  }
+  const lenNew = [...asLowerNew].length
+  if (lenNew < 4 || lenNew > 6) {
+    res.status(400).json({ error: 'bad_length' })
+    return
+  }
+  if (asLowerNew === storedOld) {
+    res.json({ ok: true, word: storedOld })
+    return
+  }
+  const clash = stmtRowWordAndSource.get(lang, asLowerNew, asUpperNew)
+  if (clash) {
+    res.status(409).json({ error: 'conflict' })
+    return
+  }
+  try {
+    const tx = db.transaction(() => {
+      const d = deleteDictionaryWord.run(lang, storedOld)
+      if (d.changes !== 1) {
+        throw new Error('delete_failed')
+      }
+      insertDictionaryWord.run(lang, asLowerNew)
+    })
+    tx()
+  } catch (e) {
+    console.error('[admin/dictionary/patch]', e)
+    res.status(500).json({ error: 'internal' })
+    return
+  }
+  res.json({ ok: true, word: asLowerNew })
 })
 
 app.listen(port, host, () => {
