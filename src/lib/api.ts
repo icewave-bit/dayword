@@ -3,11 +3,26 @@ import type { WordLength } from './words'
 import { isWordCheckDebugEnabled } from './debugEnv'
 import { getViteMergedEnv } from './runtimeEnv'
 
-export type FetchWordResult = {
-  word: string
+export type FetchRoundMetaResult = {
   /** Только для mode=live — номер 3-часового раунда (как на сервере). */
   liveRoundId?: number
 }
+
+export type GameCellState = 'correct' | 'present' | 'absent'
+
+export type GameGuessesSyncOk = {
+  ok: true
+  rows: { states: GameCellState[] }[]
+  words: string[]
+  status: 'playing' | 'won' | 'lost'
+  /** Только при status=lost — открытое секретное слово. */
+  answer: string | null
+}
+
+export type GameGuessesSyncErr =
+  | { ok: false; error: 'not_in_dictionary'; index: number }
+  | { ok: false; error: 'already_used'; index: number }
+  | { ok: false; error: 'bad_length'; index: number }
 
 if (isWordCheckDebugEnabled()) {
   console.warn(
@@ -25,7 +40,8 @@ export function getApiBase(): string {
   return apiBase()
 }
 
-export async function fetchGameWord(
+/** Метаданные раунда без секретного слова (ответ считается на сервере). */
+export async function fetchGameRoundMeta(
   params: {
     lang: 'ru' | 'en'
     length: WordLength
@@ -34,7 +50,7 @@ export async function fetchGameWord(
     practiceSeed?: string
     signal?: AbortSignal
   },
-): Promise<FetchWordResult> {
+): Promise<FetchRoundMetaResult> {
   const { lang, length, mode, practiceSeed, signal } = params
   const base = apiBase()
   const q = new URLSearchParams({
@@ -55,15 +71,77 @@ export async function fetchGameWord(
         : 'request_failed',
     )
   }
-  const data = (await res.json()) as { word?: string; liveRoundId?: number }
-  if (!data.word || typeof data.word !== 'string') throw new Error('invalid_response')
-  const w = data.word
-  const word = w.toUpperCase()
-  const out: FetchWordResult = { word }
+  const data = (await res.json()) as { liveRoundId?: number }
+  const out: FetchRoundMetaResult = {}
   if (typeof data.liveRoundId === 'number' && Number.isFinite(data.liveRoundId)) {
     out.liveRoundId = data.liveRoundId
   }
   return out
+}
+
+export async function syncGameGuesses(params: {
+  lang: 'ru' | 'en'
+  length: WordLength
+  mode: GameMode
+  liveRoundId?: number | null
+  seed?: string
+  guesses: string[]
+  signal?: AbortSignal
+}): Promise<GameGuessesSyncOk | GameGuessesSyncErr> {
+  const { lang, length, mode, liveRoundId, seed, guesses, signal } = params
+  const base = apiBase()
+  const body: Record<string, unknown> = {
+    lang,
+    length,
+    mode,
+    guesses,
+  }
+  if (mode === 'live') {
+    if (typeof liveRoundId !== 'number' || !Number.isFinite(liveRoundId)) {
+      throw new Error('live_round_required')
+    }
+    body.liveRoundId = liveRoundId
+  } else {
+    if (!seed?.trim()) throw new Error('practice_seed_required')
+    body.seed = seed.trim()
+  }
+  const res = await fetch(`${base}/api/game/guesses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (!res.ok) {
+    throw new Error(
+      typeof data.error === 'string' ? data.error : 'request_failed',
+    )
+  }
+  if (data.ok === false) {
+    const err = String(data.error ?? '')
+    const idx = typeof data.index === 'number' && Number.isFinite(data.index) ? Math.trunc(data.index) : 0
+    if (err === 'not_in_dictionary') return { ok: false, error: 'not_in_dictionary', index: idx }
+    if (err === 'already_used') return { ok: false, error: 'already_used', index: idx }
+    if (err === 'bad_length') return { ok: false, error: 'bad_length', index: idx }
+    throw new Error(err || 'request_failed')
+  }
+  if (data.ok !== true || !Array.isArray(data.rows) || !Array.isArray(data.words)) {
+    throw new Error('invalid_response')
+  }
+  const rows = data.rows as { states: GameCellState[] }[]
+  const words = data.words as string[]
+  const status = data.status
+  if (status !== 'playing' && status !== 'won' && status !== 'lost') {
+    throw new Error('invalid_response')
+  }
+  const answer = data.answer === null || typeof data.answer === 'string' ? data.answer : null
+  return {
+    ok: true,
+    rows,
+    words,
+    status,
+    answer,
+  }
 }
 
 export async function checkWordInDictionary(

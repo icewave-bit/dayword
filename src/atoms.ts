@@ -1,9 +1,10 @@
 import { atom } from 'jotai'
 import {
-  checkWordInDictionary,
-  fetchGameWord,
+  fetchGameRoundMeta,
   fetchMonthlyLeaderboardTop3,
+  type GameGuessesSyncOk,
   submitLiveRoundScore,
+  syncGameGuesses,
   userLogout,
   userMe,
 } from './lib/api'
@@ -64,7 +65,10 @@ export const utcDateKey = (): string => {
 }
 
 export const gameDateAtom = atom<string>(utcDateKey())
-export const answerAtom = atom<string>('')
+/** Секрет после поражения (приходит только с сервера при status=lost). */
+export const revealedAnswerAtom = atom<string>('')
+/** Раунд загружен: метаданные + синхронизация догадок с сервером прошли без ошибки. */
+export const gameRoundReadyAtom = atom(false)
 /** Режим: общее слово на 3 ч (live) или случайное слово (practice). */
 export const gameModeAtom = atom<GameMode>('live')
 /** Для practice — случайный seed; для live не используется. */
@@ -155,113 +159,123 @@ export const statusAtom = atom<GameStatus>('playing')
 type CellState = 'correct' | 'present' | 'absent'
 export const keyboardStateAtom = atom<Record<string, CellState>>({})
 
-type GuessResult = { word: string; states: CellState[] }
+export type GuessResult = { word: string; states: CellState[] }
 
 const wordLengthForGame = atom((get) => get(wordLengthAtom))
 
-const scoreGuess = (guess: string, answer: string, length: number): CellState[] => {
-  const g = guess.toUpperCase()
-  const a = answer.toUpperCase()
-  const states: CellState[] = Array.from({ length }, () => 'absent')
-  const remaining = a.split('')
+/** Строки догадок и раскраска приходят с сервера (`POST /api/game/guesses`). */
+export const resultsAtom = atom<GuessResult[]>([])
 
-  for (let i = 0; i < length; i += 1) {
-    if (g[i] === a[i]) {
-      states[i] = 'correct'
-      remaining[i] = '*'
-    }
+function keyboardFromResults(results: GuessResult[]): Record<string, CellState> {
+  const keyStates: Record<string, CellState> = {}
+  for (const result of results) {
+    result.word.split('').forEach((letter, index) => {
+      const nextState = result.states[index]
+      const prevState = keyStates[letter]
+      if (
+        !prevState ||
+        nextState === 'correct' ||
+        (nextState === 'present' && prevState === 'absent')
+      ) {
+        keyStates[letter] = nextState
+      }
+    })
   }
-
-  for (let i = 0; i < length; i += 1) {
-    if (states[i] === 'correct') continue
-    const idx = remaining.indexOf(g[i])
-    if (idx >= 0) {
-      states[i] = 'present'
-      remaining[idx] = '*'
-    }
-  }
-
-  return states
+  return keyStates
 }
 
-export const resultsAtom = atom<GuessResult[]>((get) => {
-  const answer = get(answerAtom)
-  const len = get(wordLengthForGame)
-  if (!answer) return []
-  return get(guessesAtom).map((word) => ({
+function boardFromSync(words: string[], rows: { states: CellState[] }[]): GuessResult[] {
+  return words.map((word, i) => ({
     word,
-    states: scoreGuess(word, answer, len),
+    states: rows[i]?.states ?? [],
   }))
-})
-
-async function filterHydratedGuesses(
-  locale: Locale,
-  length: WordLength,
-  guesses: string[],
-  seq: number,
-): Promise<string[]> {
-  const normalized = guesses
-    .map((word) => normalizeWord(word, length, locale))
-    .filter((word) => word.length === length)
-    .slice(0, MAX_ATTEMPTS)
-
-  const flags = await Promise.all(
-    normalized.map(async (w) => {
-      if (seq !== loadDailySeq) return false
-      return checkWordInDictionary(locale, w)
-    }),
-  )
-  return normalized.filter((_, i) => flags[i])
 }
+
+/** Слово для строки «Победа / Поражение» (после раунда на клиенте секрета нет). */
+export const bannerOutcomeWordAtom = atom((get) => {
+  const status = get(statusAtom)
+  const guesses = get(guessesAtom)
+  const len = get(wordLengthForGame)
+  const locale = get(localeAtom)
+  if (status === 'won') {
+    if (guesses.length === 0) return ''
+    return normalizeWord(guesses[guesses.length - 1], len, locale)
+  }
+  if (status === 'lost') return get(revealedAnswerAtom)
+  return ''
+})
 
 export const loadDailyAndHydrateAtom = atom(null, async (get, set) => {
   const seq = ++loadDailySeq
   set(gameLoadingAtom, true)
   set(gameLoadErrorAtom, null)
+  set(gameRoundReadyAtom, false)
   try {
     set(messageAtom, '')
     const locale = get(localeAtom)
     const length = get(wordLengthAtom)
     const mode = get(gameModeAtom)
 
+    const applySync = (sync: GameGuessesSyncOk) => {
+      set(guessesAtom, sync.words)
+      set(resultsAtom, boardFromSync(sync.words, sync.rows))
+      set(statusAtom, sync.status)
+      set(revealedAnswerAtom, sync.answer ?? '')
+      set(keyboardStateAtom, keyboardFromResults(boardFromSync(sync.words, sync.rows)))
+    }
+
     if (mode === 'live') {
-      const data = await fetchGameWord({ lang: locale, length, mode: 'live' })
+      const data = await fetchGameRoundMeta({ lang: locale, length, mode: 'live' })
       if (seq !== loadDailySeq) return
       const rid = data.liveRoundId
       if (rid === undefined) throw new Error('invalid_response')
       set(liveRoundIdAtom, rid)
-      set(answerAtom, data.word)
       set(gameSeedAtom, '')
 
       const key = liveGameStorageKey(locale, length, rid)
       const savedRaw = localStorage.getItem(key)
-      if (!savedRaw) {
-        set(guessesAtom, [])
-      } else {
+      let savedGuesses: string[] = []
+      if (savedRaw) {
         try {
           const parsed = JSON.parse(savedRaw) as Partial<StoredLiveGame>
           if (parsed.liveRoundId !== rid || !Array.isArray(parsed.guesses)) {
             localStorage.removeItem(key)
-            set(guessesAtom, [])
           } else {
-            const safe = await filterHydratedGuesses(locale, length, parsed.guesses, seq)
-            if (seq !== loadDailySeq) return
-            set(guessesAtom, safe)
+            savedGuesses = parsed.guesses.filter((g) => typeof g === 'string').slice(0, MAX_ATTEMPTS)
           }
         } catch {
           localStorage.removeItem(key)
-          set(guessesAtom, [])
         }
       }
+
+      let sync = await syncGameGuesses({
+        lang: locale,
+        length,
+        mode: 'live',
+        liveRoundId: rid,
+        guesses: savedGuesses,
+      })
+      if (seq !== loadDailySeq) return
+      if (!sync.ok) {
+        localStorage.removeItem(key)
+        sync = await syncGameGuesses({
+          lang: locale,
+          length,
+          mode: 'live',
+          liveRoundId: rid,
+          guesses: [],
+        })
+      }
+      if (seq !== loadDailySeq) return
+      if (!sync.ok) throw new Error('sync_failed')
+      applySync(sync)
     } else {
       let seed = get(gameSeedAtom)
       if (!seed) {
         seed = crypto.randomUUID()
         set(gameSeedAtom, seed)
       }
-      const key = practiceGameStorageKey(locale, length, seed)
-      const savedRaw = localStorage.getItem(key)
-      const data = await fetchGameWord({
+      await fetchGameRoundMeta({
         lang: locale,
         length,
         mode: 'practice',
@@ -269,30 +283,49 @@ export const loadDailyAndHydrateAtom = atom(null, async (get, set) => {
       })
       if (seq !== loadDailySeq) return
       set(liveRoundIdAtom, null)
-      set(answerAtom, data.word)
 
-      if (!savedRaw) {
-        set(guessesAtom, [])
-      } else {
+      const key = practiceGameStorageKey(locale, length, seed)
+      const savedRaw = localStorage.getItem(key)
+      let savedGuesses: string[] = []
+      if (savedRaw) {
         try {
           const parsed = JSON.parse(savedRaw) as Partial<StoredPracticeGame>
           if (parsed.seed !== seed || !Array.isArray(parsed.guesses)) {
             localStorage.removeItem(key)
-            set(guessesAtom, [])
           } else {
-            const safe = await filterHydratedGuesses(locale, length, parsed.guesses, seq)
-            if (seq !== loadDailySeq) return
-            set(guessesAtom, safe)
+            savedGuesses = parsed.guesses.filter((g) => typeof g === 'string').slice(0, MAX_ATTEMPTS)
           }
         } catch {
           localStorage.removeItem(key)
-          set(guessesAtom, [])
         }
       }
+
+      let sync = await syncGameGuesses({
+        lang: locale,
+        length,
+        mode: 'practice',
+        seed,
+        guesses: savedGuesses,
+      })
+      if (seq !== loadDailySeq) return
+      if (!sync.ok) {
+        localStorage.removeItem(key)
+        sync = await syncGameGuesses({
+          lang: locale,
+          length,
+          mode: 'practice',
+          seed,
+          guesses: [],
+        })
+      }
+      if (seq !== loadDailySeq) return
+      if (!sync.ok) throw new Error('sync_failed')
+      applySync(sync)
     }
 
     if (seq !== loadDailySeq) return
-    set(recomputeGameAtom)
+    set(gameRoundReadyAtom, true)
+    set(persistGameAtom)
     set(persistSettingsAtom)
   } catch (e) {
     if (seq !== loadDailySeq) return
@@ -300,9 +333,13 @@ export const loadDailyAndHydrateAtom = atom(null, async (get, set) => {
       gameLoadErrorAtom,
       e instanceof Error ? e.message : 'unknown',
     )
-    set(answerAtom, '')
+    set(revealedAnswerAtom, '')
     set(guessesAtom, [])
+    set(resultsAtom, [])
+    set(statusAtom, 'playing')
+    set(keyboardStateAtom, {})
     set(liveRoundIdAtom, null)
+    set(gameRoundReadyAtom, false)
   } finally {
     if (seq === loadDailySeq) set(gameLoadingAtom, false)
   }
@@ -328,48 +365,15 @@ const persistGameAtom = atom(null, (get) => {
   localStorage.setItem(practiceGameStorageKey(locale, length, seed), JSON.stringify(payload))
 })
 
-export const recomputeGameAtom = atom(null, (get, set) => {
-  const answer = get(answerAtom)
-  const guesses = get(guessesAtom)
-  const locale = get(localeAtom)
-  const len = get(wordLengthForGame)
-  const won =
-    Boolean(answer) &&
-    guesses.some((word) => normalizeWord(word, len, locale) === answer)
-  const status = !answer
-    ? 'playing'
-    : won
-      ? 'won'
-      : guesses.length >= MAX_ATTEMPTS
-        ? 'lost'
-        : 'playing'
-  set(statusAtom, status)
-
-  const keyStates: Record<string, CellState> = {}
-  for (const result of get(resultsAtom)) {
-    result.word.split('').forEach((letter, index) => {
-      const nextState = result.states[index]
-      const prevState = keyStates[letter]
-      if (
-        !prevState ||
-        nextState === 'correct' ||
-        (nextState === 'present' && prevState === 'absent')
-      ) {
-        keyStates[letter] = nextState
-      }
-    })
-  }
-  set(keyboardStateAtom, keyStates)
-})
-
 export const submitGuessAtom = atom(null, async (get, set) => {
-  if (get(statusAtom) !== 'playing' || get(gameLoadingAtom)) return
-  const answer = get(answerAtom)
-  if (!answer) return
+  if (get(statusAtom) !== 'playing' || get(gameLoadingAtom) || !get(gameRoundReadyAtom)) return
 
   const locale = get(localeAtom)
   const length = get(wordLengthAtom)
+  const mode = get(gameModeAtom)
   const current = get(currentGuessAtom)
+  const rid = get(liveRoundIdAtom)
+  const seed = get(gameSeedAtom)
 
   if (current.length !== length) {
     if (isWordCheckDebugEnabled()) {
@@ -385,37 +389,40 @@ export const submitGuessAtom = atom(null, async (get, set) => {
   if (isWordCheckDebugEnabled()) {
     console.warn('[submitGuess]', {
       locale,
-      willCallCheckApi: true,
-      note: 'Проверка слова через SQLite (ru/en) → POST /api/game/check',
+      note: 'Словарь и скоринг на сервере → POST /api/game/guesses',
       word: current,
     })
   }
 
-  const canonical = normalizeWord(current, length, locale)
-  const inDictionary = await checkWordInDictionary(locale, canonical)
+  const nextGuesses = [...get(guessesAtom), current]
+  const sync = await syncGameGuesses({
+    lang: locale,
+    length,
+    mode,
+    liveRoundId: mode === 'live' ? rid : undefined,
+    seed: mode === 'practice' ? seed : undefined,
+    guesses: nextGuesses,
+  })
 
-  if (!inDictionary) {
-    set(messageAtom, 'notInDictionary')
-    return
-  }
-  const dup = get(guessesAtom).some(
-    (g) => normalizeWord(g, length, locale) === canonical,
-  )
-  if (dup) {
-    set(messageAtom, 'alreadyUsed')
+  if (!sync.ok) {
+    if (sync.error === 'not_in_dictionary') set(messageAtom, 'notInDictionary')
+    else if (sync.error === 'already_used') set(messageAtom, 'alreadyUsed')
+    else set(messageAtom, 'notInDictionary')
     return
   }
 
   const prevGuessesCount = get(guessesAtom).length
-  // Таймер старта: момент первого успешного сабмита (только для live).
-  if (prevGuessesCount === 0 && get(gameModeAtom) === 'live') {
+  if (prevGuessesCount === 0 && mode === 'live') {
     set(firstGuessSubmittedAtMsAtom, performance.now())
   }
 
-  set(guessesAtom, [...get(guessesAtom), current])
+  set(guessesAtom, sync.words)
+  set(resultsAtom, boardFromSync(sync.words, sync.rows))
+  set(statusAtom, sync.status)
+  set(revealedAnswerAtom, sync.answer ?? '')
+  set(keyboardStateAtom, keyboardFromResults(boardFromSync(sync.words, sync.rows)))
   set(currentGuessAtom, '')
   set(messageAtom, '')
-  set(recomputeGameAtom)
   set(persistGameAtom)
 })
 
@@ -430,7 +437,7 @@ export const afterWordSuggestedAtom = atom(
 
 export const addLetterAtom = atom(null, (get, set, letter: string) => {
   if (get(statusAtom) !== 'playing' || get(gameLoadingAtom)) return
-  if (!get(answerAtom)) return
+  if (!get(gameRoundReadyAtom)) return
   const length = get(wordLengthAtom)
   const current = get(currentGuessAtom)
   if (current.length >= length) return
@@ -439,7 +446,7 @@ export const addLetterAtom = atom(null, (get, set, letter: string) => {
 })
 
 export const removeLetterAtom = atom(null, (get, set) => {
-  if (get(statusAtom) !== 'playing' || get(gameLoadingAtom)) return
+  if (get(statusAtom) !== 'playing' || get(gameLoadingAtom) || !get(gameRoundReadyAtom)) return
   const current = get(currentGuessAtom)
   if (current.length === 0) {
     const msg = get(messageAtom)
@@ -465,8 +472,11 @@ export const resetGameAtom = atom(null, async (get, set) => {
     set(messageAtom, '')
     set(statusAtom, 'playing')
     set(keyboardStateAtom, {})
-    set(recomputeGameAtom)
+    set(resultsAtom, [])
+    set(revealedAnswerAtom, '')
+    set(gameRoundReadyAtom, false)
     set(persistSettingsAtom)
+    await set(loadDailyAndHydrateAtom)
     return
   }
 
@@ -480,6 +490,8 @@ export const resetGameAtom = atom(null, async (get, set) => {
   set(messageAtom, '')
   set(statusAtom, 'playing')
   set(keyboardStateAtom, {})
+  set(resultsAtom, [])
+  set(revealedAnswerAtom, '')
   set(persistSettingsAtom)
   await set(loadDailyAndHydrateAtom)
 })
@@ -496,7 +508,9 @@ export const startLiveGameAtom = atom(null, (_get, set) => {
   set(messageAtom, '')
   set(statusAtom, 'playing')
   set(keyboardStateAtom, {})
-  set(answerAtom, '')
+  set(resultsAtom, [])
+  set(revealedAnswerAtom, '')
+  set(gameRoundReadyAtom, false)
   set(gameLoadErrorAtom, null)
   set(persistSettingsAtom)
 })
@@ -513,7 +527,9 @@ export const startPracticeGameAtom = atom(null, (_get, set) => {
   set(messageAtom, '')
   set(statusAtom, 'playing')
   set(keyboardStateAtom, {})
-  set(answerAtom, '')
+  set(resultsAtom, [])
+  set(revealedAnswerAtom, '')
+  set(gameRoundReadyAtom, false)
   set(gameLoadErrorAtom, null)
   set(persistSettingsAtom)
 })
@@ -584,13 +600,10 @@ export const syncLiveRoundScoreAtom = atom(null, async (get, set) => {
   const locale = get(localeAtom)
   const len = get(wordLengthAtom)
   const guesses = get(guessesAtom)
-  const answer = get(answerAtom)
-  if (!answer) return
 
   const won = st === 'won'
   if (won) {
-    const last = guesses.length > 0 ? normalizeWord(guesses[guesses.length - 1], len, locale) : ''
-    if (last !== answer) return
+    if (guesses.length < 1) return
   } else {
     if (guesses.length !== MAX_ATTEMPTS) return
   }

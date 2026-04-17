@@ -383,6 +383,77 @@ const stmtCheck = db.prepare(
    LIMIT 1`,
 )
 
+/** Как на клиенте (`normalizeWord`): только буквы алфавита, верхний регистр, фиксированная длина. */
+function normalizeGuessForGame(lang, raw, maxLen) {
+  const s = String(raw ?? '')
+  if (lang === 'en') {
+    return s
+      .toUpperCase()
+      .replace(/[^A-Z]/g, '')
+      .slice(0, maxLen)
+  }
+  return s
+    .toUpperCase()
+    .replace(/[^А-ЯЁ]/g, '')
+    .slice(0, maxLen)
+}
+
+function guessCanonForAnswer(lang, strippedUpper) {
+  return lang === 'ru' ? normalizeRuForClient(strippedUpper) : normalizeEnForClient(strippedUpper)
+}
+
+/** Wordle-скоринг; `length` — число букв (как в клиентском `scoreGuess`). */
+function scoreGuessServer(answer, guess, length) {
+  const g = String(guess).toUpperCase()
+  const a = String(answer).toUpperCase()
+  /** @type {('correct'|'present'|'absent')[]} */
+  const states = Array.from({ length }, () => 'absent')
+  const remaining = a.split('')
+
+  for (let i = 0; i < length; i += 1) {
+    if (g[i] === a[i]) {
+      states[i] = 'correct'
+      remaining[i] = '*'
+    }
+  }
+  for (let i = 0; i < length; i += 1) {
+    if (states[i] === 'correct') continue
+    const idx = remaining.indexOf(g[i])
+    if (idx >= 0) {
+      states[i] = 'present'
+      remaining[idx] = '*'
+    }
+  }
+  return states
+}
+
+function resolveDailyAnswerUpper(lang, length, mode, liveRoundId, practiceSeed) {
+  const row = stmtCount.get(lang, length)
+  const count = row?.c ?? 0
+  if (count === 0) return { error: 'no_words_for_length' }
+  let seedForHash = ''
+  if (mode === 'practice') {
+    const seed = typeof practiceSeed === 'string' ? practiceSeed.trim() : ''
+    if (!seed) return { error: 'bad_request' }
+    seedForHash = `practice:${seed}`
+  } else {
+    if (typeof liveRoundId !== 'number' || !Number.isFinite(liveRoundId)) {
+      return { error: 'bad_request' }
+    }
+    const rid = Math.trunc(liveRoundId)
+    const nowRound = liveRoundIdNow()
+    if (rid > nowRound + 3) return { error: 'future_round' }
+    if (rid < nowRound - 10000) return { error: 'round_too_old' }
+    seedForHash = `live:${rid}`
+  }
+  const offset = offsetFromSeed(seedForHash, count)
+  const wordRow = stmtDaily.get(lang, length, offset)
+  const wordDb = wordRow?.word
+  if (!wordDb || typeof wordDb !== 'string') return { error: 'internal' }
+  const answer = lang === 'ru' ? normalizeRuForClient(wordDb) : normalizeEnForClient(wordDb)
+  return { answer }
+}
+
 function utfCodepoints(s) {
   return [...String(s)].map((ch) => 'U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0'))
 }
@@ -644,7 +715,6 @@ app.get('/api/game/daily', (req, res) => {
     return
   }
 
-  let seedForHash = ''
   let liveRoundId = null
   if (mode === 'practice') {
     const seed = typeof req.query.seed === 'string' ? req.query.seed.trim() : ''
@@ -652,23 +722,103 @@ app.get('/api/game/daily', (req, res) => {
       res.status(400).json({ error: 'bad_request' })
       return
     }
-    seedForHash = `practice:${seed}`
   } else {
     liveRoundId = liveRoundIdNow()
-    seedForHash = `live:${liveRoundId}`
   }
 
-  const offset = offsetFromSeed(seedForHash, count)
-  const wordRow = stmtDaily.get(lang, length, offset)
-  const word = wordRow?.word
-  if (!word || typeof word !== 'string') {
-    res.status(500).json({ error: 'internal' })
-    return
-  }
-  const out = lang === 'ru' ? normalizeRuForClient(word) : normalizeEnForClient(word)
-  const body = { word: out }
+  const body = {}
   if (liveRoundId !== null) body.liveRoundId = liveRoundId
   res.json(body)
+})
+
+app.post('/api/game/guesses', (req, res) => {
+  const lang = parseLang(req.body?.lang)
+  const length = parseLength(req.body?.length)
+  const mode = req.body?.mode === 'practice' ? 'practice' : 'live'
+  const guessesRaw = req.body?.guesses
+
+  if (!lang || length === null || !Array.isArray(guessesRaw)) {
+    res.status(400).json({ error: 'bad_request' })
+    return
+  }
+  if (guessesRaw.length > 6) {
+    res.status(400).json({ error: 'too_many_guesses' })
+    return
+  }
+
+  let liveRoundId = null
+  let practiceSeed = ''
+  if (mode === 'live') {
+    const rid = req.body?.liveRoundId
+    if (typeof rid !== 'number' || !Number.isFinite(rid)) {
+      res.status(400).json({ error: 'bad_request' })
+      return
+    }
+    liveRoundId = Math.trunc(rid)
+  } else {
+    practiceSeed = typeof req.body?.seed === 'string' ? req.body.seed.trim() : ''
+    if (!practiceSeed) {
+      res.status(400).json({ error: 'bad_request' })
+      return
+    }
+  }
+
+  const resolved = resolveDailyAnswerUpper(lang, length, mode, liveRoundId, practiceSeed)
+  if (resolved.error) {
+    if (resolved.error === 'no_words_for_length') res.status(404).json({ error: resolved.error })
+    else if (resolved.error === 'internal') res.status(500).json({ error: resolved.error })
+    else res.status(400).json({ error: resolved.error })
+    return
+  }
+  const { answer } = resolved
+
+  /** @type {{ states: ('correct'|'present'|'absent')[] }[]} */
+  const rows = []
+  const words = []
+  const seen = new Set()
+
+  for (let i = 0; i < guessesRaw.length; i += 1) {
+    const raw = guessesRaw[i]
+    if (typeof raw !== 'string') {
+      res.status(400).json({ error: 'bad_request' })
+      return
+    }
+    const stripped = normalizeGuessForGame(lang, raw, length)
+    if (stripped.length !== length) {
+      res.json({ ok: false, error: 'bad_length', index: i })
+      return
+    }
+    const asLower = lang === 'ru' ? normalizeRuLower(stripped) : normalizeEnLower(stripped)
+    const asUpper = lang === 'ru' ? normalizeRuUpper(stripped) : normalizeEnUpper(stripped)
+    const hit = stmtCheck.get(lang, asLower, asUpper)
+    const inDict = hit?.ok === 1
+    if (!inDict) {
+      res.json({ ok: false, error: 'not_in_dictionary', index: i })
+      return
+    }
+    const canon = guessCanonForAnswer(lang, stripped)
+    if (seen.has(canon)) {
+      res.json({ ok: false, error: 'already_used', index: i })
+      return
+    }
+    seen.add(canon)
+    const states = scoreGuessServer(answer, canon, length)
+    rows.push({ states })
+    words.push(canon)
+  }
+
+  const last = words.length > 0 ? words[words.length - 1] : null
+  let status = 'playing'
+  if (last !== null && last === answer) status = 'won'
+  else if (words.length >= 6) status = 'lost'
+
+  res.json({
+    ok: true,
+    rows,
+    words,
+    status,
+    answer: status === 'lost' ? answer : null,
+  })
 })
 
 app.post('/api/game/check', (req, res) => {

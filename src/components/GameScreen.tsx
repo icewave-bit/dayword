@@ -2,11 +2,12 @@ import { useEffect, type CSSProperties } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import {
   addLetterAtom,
-  answerAtom,
+  bannerOutcomeWordAtom,
   currentGuessAtom,
   gameLoadErrorAtom,
   gameLoadingAtom,
   gameModeAtom,
+  gameRoundReadyAtom,
   keyboardRowsAtom,
   keyboardStateAtom,
   liveRoundIdAtom,
@@ -67,7 +68,8 @@ export function GameScreen() {
   const message = useAtomValue(messageAtom)
   const status = useAtomValue(statusAtom)
   const keyboardState = useAtomValue(keyboardStateAtom)
-  const answer = useAtomValue(answerAtom)
+  const gameRoundReady = useAtomValue(gameRoundReadyAtom)
+  const outcomeWord = useAtomValue(bannerOutcomeWordAtom)
   const results = useAtomValue(resultsAtom)
   const keyboardRows = useAtomValue(keyboardRowsAtom)
   const loading = useAtomValue(gameLoadingAtom)
@@ -83,7 +85,7 @@ export function GameScreen() {
   const setHelpOpen = useSetAtom(helpOpenAtom)
   const c = t(locale)
 
-  const inputLocked = loading || loadError !== null || !answer
+  const inputLocked = loading || loadError !== null || !gameRoundReady
   const gameInputBlocked = inputLocked || exitConfirmOpen
 
   useEffect(() => {
@@ -166,12 +168,12 @@ export function GameScreen() {
               : ''
 
   const hintMessage =
-    loading || !answer
+    loading || !gameRoundReady
       ? ''
       : status === 'won'
-        ? c.won(answer)
+        ? c.won(outcomeWord)
         : status === 'lost'
-          ? c.lost(answer)
+          ? c.lost(outcomeWord)
           : c.hintPlaying
 
   const bannerMessage = loadError
